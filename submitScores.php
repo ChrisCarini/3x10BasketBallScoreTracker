@@ -1,66 +1,51 @@
 <?php
-$databaseName = "this_is_your_mysql_database_name";
+require_once("functions.php");
 
-function connectToMySQL($dbName = "")
-{
-    /* Connect to MySQL */
-    $user = 'this_is_your_mysql_username';
-    $pass = 'this_is_your_mysql_password';
-    // Dreamhost Database
-    $host = 'this_is_a_long_host_name_com';
-    if($dbName == "")
-    {
-        $db = 'this_is_your_mysql_database_name';
-    }
-    else
-    {
-        $db = $dbName;
-    }
-    $mysqlLink = mysql_connect($host,$user,$pass) or die ('Error connecting to mysql');
-    @mysql_select_db($db);
-    return $mysqlLink;
-}
-
-function userExists($name,$mysqlLink)
-{
-    $result = mysql_query('SELECT * FROM  `users` WHERE  `name` =  "'.$name.'"', $mysqlLink);
-    $num_rows = mysql_num_rows($result);
-    if($num_rows > 0)
-    {
+function userExists($name,$mysqlPDO) {
+    $stmt = $mysqlPDO->prepare('SELECT * FROM employees WHERE name = :name;');
+    $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+    $stmt->execute();
+    
+    $num_rows = $stmt->rowCount();
+    
+    if($num_rows > 0) {
         return true;
-    }
-    else
-    {
+    } else {
         return false;
     }
 }
-function addUser($name,$mysqlLink)
-{
-	$sql = "INSERT INTO `users` (`id`, `name`, `dateadded`) VALUES ('', '".$name."', NOW())";
-	if(mysql_query($sql,$mysqlLink))
-	{
-		return;
-	}
-	else
-	{
-		$err = "Error Occured Inserting User(".$name.") into Database; exiting";
-		echo $err;
-		exit($err);
-	}
+
+function addUser($name,$mysqlPDO) {    
+    $stmt = $mysqlPDO->prepare("INSERT INTO `users` (`id`, `name`, `dateadded`) VALUES ('', ':name', NOW());");
+    $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+    $insert_success = $stmt->execute();
+    if($insert_success) {
+        return;
+    } else {
+        $err = "Error Occured Inserting User(".$name.") into Database; exiting";
+        echo $err;
+        exit($err);
+    }
 }
-function submitScore($shooterName,$scorerName,$round1Score,$round2Score,$round3Score,$mysqlLink)
-{
-	$sql = "INSERT INTO `stats` (`id`, `shooterName`, `scorerName`, `round1Points`, `round2Points`, `round3Points`, `totalPoints`, `dateadded`) VALUES ('', '".$shooterName."', '".$scorerName."', '".$round1Score."', '".$round2Score."', '".$round3Score."', '".($round1Score+$round2Score+$round3Score)."', NOW())";
-	if(mysql_query($sql,$mysqlLink))
-	{
-		return "Score Submitted Successfully!!";
-	}
-	else
-	{
-		$err = "Error Occured Inserting Score into Database; exiting";
-		echo $err;
-		exit($err);
-	}
+
+function submitScore($shooterName,$scorerName,$round1Score,$round2Score,$round3Score,$mysqlPDO) {
+    $stmt = $mysqlPDO->prepare("INSERT INTO `stats` (`id`, `shooterName`, `scorerName`, `round1Points`, `round2Points`, `round3Points`, `totalPoints`, `dateadded`) VALUES ('', ':shooterName', ':scorerName', ':round1Score', ':round2Score', ':round3Score', ':totalPoints', NOW());");
+    $stmt->bindValue(':shooterName', $shooterName, PDO::PARAM_STR);
+    $stmt->bindValue(':scorerName', $scorerName, PDO::PARAM_STR);
+    $stmt->bindValue(':round1Score', $round1Score, PDO::PARAM_INT);
+    $stmt->bindValue(':round2Score', $round2Score, PDO::PARAM_INT);
+    $stmt->bindValue(':round3Score', $round3Score, PDO::PARAM_INT);
+    $totalPoints = ($round1Score+$round2Score+$round3Score);
+    $stmt->bindValue(':totalPoints', $totalPoints, PDO::PARAM_INT);
+    $insert_success = $stmt->execute();
+    
+    if($insert_success) {
+        return "Score Submitted Successfully!!";
+    } else {
+        $err = "Error Occured Inserting Score into Database; exiting";
+        echo $err;
+        exit($err);
+    }
 }
 
 $shooterName = preg_replace('/\s+/', '', $_POST['shooterSelect']); // Remove all whitespace from POST var
@@ -70,28 +55,28 @@ $round2Score = intval($_POST['round2Select']);
 $round3Score = intval($_POST['round3Select']);
 
 
-$mysqlLink = connectToMySQL($databaseName);
+$mysqlPDO = getMySqlPDOObject();
 
 // Check Inputs, Respond w/ Error if appropiate
 foreach(array($shooterName,$scorerName) as $key=>$personName)
 {
-	if(!userExists($personName,$mysqlLink))
-	{
-		addUser($personName,$mysqlLink);
-	}
+    if(!userExists($personName,$mysqlPDO))
+    {
+        addUser($personName,$mysqlPDO);
+    }
 }
 foreach(array($round1Score,$round2Score,$round3Score) as $key=>$roundScore)
 {
-	if (!is_numeric($roundScore) || ($roundScore < 0 || $roundScore > 10))
-	{
-		$err = "Invalid Score: ".$roundScore."; please enter a number between 0 and 10";
-		echo $err;
-		exit($err);
-	}
+    if (!is_numeric($roundScore) || ($roundScore < 0 || $roundScore > 10))
+    {
+        $err = "Invalid Score: ".$roundScore."; please enter a number between 0 and 10";
+        echo $err;
+        exit($err);
+    }
 }
 
 // Inputs Good, Insert into Database
 echo $shooterName."-".$scorerName."-".$round1Score.":".$round2Score.":".$round3Score;
-echo submitScore($shooterName,$scorerName,$round1Score,$round2Score,$round3Score,$mysqlLink);
+echo submitScore($shooterName,$scorerName,$round1Score,$round2Score,$round3Score,$mysqlPDO);
 
 ?>
